@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --ink:#1c2530; --muted:#6b7685;
+    --accent:#2f6feb; --accent-ink:#ffffff; --good:#1a7f4b; --bad:#c0392b;
+    --border:#e3e7ee; --hi:#7a8494;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#12151b; --card:#1b2029; --ink:#eef1f6; --muted:#9aa4b2;
+      --accent:#5b8dfb; --accent-ink:#0b0d12; --good:#48c78e; --bad:#ff6b6b;
+      --border:#2a3140; --hi:#8b93a3; }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); min-height:100vh; padding:16px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+  header{padding:20px 4px 12px;}
+  header h1{font-size:1.35rem;margin:0 0 4px;}
+  header p{margin:0;color:var(--muted);font-size:0.92rem;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:22px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  .center{text-align:center;}
+  button{
+    font:inherit; cursor:pointer; border:none; border-radius:10px;
+    padding:11px 20px; font-weight:600; font-size:0.95rem;
+  }
+  .btn-primary{background:var(--accent); color:var(--accent-ink);}
+  .btn-primary:disabled{opacity:0.45; cursor:not-allowed;}
+  .btn-secondary{background:transparent; color:var(--ink); border:1px solid var(--border);}
+  .btn-row{display:flex; gap:10px; justify-content:space-between; margin-top:18px; flex-wrap:wrap;}
+  .btn-row .spacer{flex:1;}
+  .progress-outer{height:8px; background:var(--border); border-radius:6px; overflow:hidden; margin-bottom:18px;}
+  .progress-inner{height:100%; background:var(--accent); transition:width .25s ease;}
+  .qmeta{font-size:0.82rem; color:var(--muted); margin-bottom:6px;}
+  .qtext{font-size:1.08rem; font-weight:600; margin:2px 0 4px; line-height:1.45;}
+  .qtext-hi{font-size:0.95rem; color:var(--hi); margin:0 0 18px; line-height:1.5;}
+  .option{
+    display:flex; align-items:flex-start; gap:10px; border:1px solid var(--border);
+    border-radius:10px; padding:12px 14px; margin-bottom:10px; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .option:hover{border-color:var(--accent);}
+  .option.selected{border-color:var(--accent); background:rgba(47,111,235,0.07);}
+  .option input{margin-top:3px; flex-shrink:0;}
+  .option .otext{font-size:0.96rem;}
+  input[type=text], textarea, select{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--ink); font:inherit; font-size:0.96rem;
+  }
+  select{appearance:auto;}
+  .score-num{font-size:3rem; font-weight:800; color:var(--accent); margin:6px 0;}
+  .score-pct{color:var(--muted); font-size:1.05rem;}
+  .review-item{border-bottom:1px solid var(--border); padding:14px 0;}
+  .review-item:last-child{border-bottom:none;}
+  .review-q{font-weight:600; font-size:0.95rem; margin-bottom:6px;}
+  .review-line{font-size:0.88rem; margin:2px 0; line-height:1.4;}
+  .tag-correct{color:var(--good); font-weight:700;}
+  .tag-wrong{color:var(--bad); font-weight:700;}
+  .tag-open{color:var(--muted); font-weight:700;}
+  .loader{padding:40px 0; text-align:center; color:var(--muted);}
+  .spinner{
+    width:34px;height:34px;border-radius:50%;border:3px solid var(--border);
+    border-top-color:var(--accent); animation:spin 0.8s linear infinite; margin:0 auto 14px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .error-box{background:rgba(192,57,43,0.08); border:1px solid rgba(192,57,43,0.3); color:var(--bad); padding:14px; border-radius:10px; font-size:0.88rem; line-height:1.5;}
+  .stats-row{display:flex; gap:10px; justify-content:center; margin:16px 0; flex-wrap:wrap;}
+  .stat-pill{background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:8px 14px; font-size:0.85rem;}
+  .stat-pill b{display:block; font-size:1.1rem;}
+  footer{text-align:center; color:var(--muted); font-size:0.78rem; padding:10px 0 30px;}
+  a{color:var(--accent);}
+  .field-label{display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Quiz</h1>
+    <p>Quiz type chuno, apni details bharo, aur shuru karo. Har attempt mein questions shuffle hote hain.</p>
+  </header>
+  <div id="app"></div>
+  <footer id="sheetLink"></footer>
+</div>
+
+<script>
+const SHEET_ID = "15avH1F6spy_KK-gw5bI5RFsRM12mUk5QnLeuhVAL77o";
+const SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+const GVIZ_CALLBACK = "__quizGvizCallback";
+// Paste the Apps Script Web App URL here (see setup instructions) so results get logged to the Users tab.
+const RESULTS_ENDPOINT = "https://script.google.com/macros/s/AKfycbxaSPvzWxYlpsDXBMuK2ZBIJ-er4Ah3BkoKKo2Xhz7_thuSlN2m0IFx_jvU_fHW5ERUFA/exec";
+
+// Quiz types -> which tab (gid) to read from
+const QUIZ_TYPES = {
+  "Sales": { gid: "1379420378", label: "Sales" },
+  "PC": { gid: "1230662837", label: "PC" }
+};
+
+const app = document.getElementById("app");
+document.getElementById("sheetLink").innerHTML =
+  `Questions is Google Sheet se aate hain — <a href="${SHEET_EDIT_URL}" target="_blank" rel="noopener">yahan edit karo</a>.`;
+
+let ALL_QUESTIONS = [];
+let QUIZ = [];
+let idx = 0;
+let answers = {};
+let userName = "";
+let userMobile = "";
+let quizType = "Sales";
+let resultSent = false;
+let quizQuit = false;
+
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function esc(s){
+  return (s===undefined||s===null) ? "" : String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function renderStart(){
+  const options = Object.keys(QUIZ_TYPES).map(k =>
+    `<option value="${esc(k)}" ${k===quizType?'selected':''}>${esc(QUIZ_TYPES[k].label)}</option>`
+  ).join("");
+
+  app.innerHTML = `
+    <div class="card center">
+      <p style="color:var(--muted); font-size:0.9rem;">Naam, mobile number aur quiz type bharo, phir Start Quiz dabao.</p>
+      <div style="text-align:left; max-width:320px; margin:8px auto 0;">
+        <label class="field-label">Naam</label>
+        <input type="text" id="nameInput" placeholder="Aapka pura naam" value="${esc(userName)}" style="margin-bottom:12px;">
+        <label class="field-label">Mobile Number</label>
+        <input type="text" id="mobileInput" placeholder="10-digit mobile number" value="${esc(userMobile)}" style="margin-bottom:12px;">
+        <label class="field-label">Quiz Type</label>
+        <select id="quizTypeInput">${options}</select>
+        <div id="startErr" style="color:var(--bad); font-size:0.82rem; margin-top:8px; display:none;">Naam aur valid 10-digit mobile number dono bharo.</div>
+      </div>
+      <button class="btn-primary" id="startBtn" style="margin-top:16px;">Start Quiz</button>
+    </div>
+  `;
+  document.getElementById("startBtn").onclick = () => {
+    const name = document.getElementById("nameInput").value.trim();
+    const mobile = document.getElementById("mobileInput").value.trim();
+    const mobileOk = /^[0-9]{10}$/.test(mobile);
+    if(!name || !mobileOk){
+      document.getElementById("startErr").style.display = "block";
+      return;
+    }
+    userName = name;
+    userMobile = mobile;
+    quizType = document.getElementById("quizTypeInput").value;
+    loadSheetAndStart();
+  };
+}
+
+function loadSheetAndStart(){
+  const typeInfo = QUIZ_TYPES[quizType];
+  app.innerHTML = `<div class="card loader"><div class="spinner"></div>${esc(typeInfo.label)} quiz ke questions load ho rahe hain…</div>`;
+
+  const timeoutId = setTimeout(() => {
+    if(window[GVIZ_CALLBACK]){
+      window[GVIZ_CALLBACK] = () => {};
+      showLoadError(new Error("15 second mein response nahi aaya. Link galat ho sakta hai, ya sharing abhi propagate nahi hui."));
+    }
+  }, 15000);
+
+  window[GVIZ_CALLBACK] = function(data){
+    clearTimeout(timeoutId);
+    try{
+      if(!data || !data.table) throw new Error("Sheet se unexpected response mila.");
+      const rows = data.table.rows || [];
+      const cols = data.table.cols.map(c => (c.label || c.id || "").trim());
+      const idxOf = name => cols.findIndex(c => c.toLowerCase() === name.toLowerCase());
+
+      const cellVal = (row, i) => {
+        if(i<0 || !row.c[i] || row.c[i].v===null || row.c[i].v===undefined) return "";
+        return String(row.c[i].v).trim();
+      };
+
+      // Detect which schema this tab uses.
+      const cQEN = idxOf("Question_EN");
+      const isBilingual = cQEN !== -1;
+
+      if(isBilingual){
+        // PC-style schema: ID,Type,Question_EN,Question_HI,OptionA_EN,OptionA_HI,...,CorrectAnswer,Notes
+        const cID=idxOf("ID"), cType=idxOf("Type"), cQHI=idxOf("Question_HI"),
+          cAEN=idxOf("OptionA_EN"), cAHI=idxOf("OptionA_HI"), cBEN=idxOf("OptionB_EN"), cBHI=idxOf("OptionB_HI"),
+          cCEN=idxOf("OptionC_EN"), cCHI=idxOf("OptionC_HI"), cDEN=idxOf("OptionD_EN"), cDHI=idxOf("OptionD_HI"),
+          cAns=idxOf("CorrectAnswer"), cNotes=idxOf("Notes");
+
+        ALL_QUESTIONS = rows.map(row => {
+          const type = cellVal(row,cType) || "single";
+          const options = [];
+          [["A",cAEN,cAHI],["B",cBEN,cBHI],["C",cCEN,cCHI],["D",cDEN,cDHI]].forEach(([letter,eIdx,hIdx]) => {
+            const en = cellVal(row,eIdx);
+            if(en) options.push({letter, text: en, textHi: cellVal(row,hIdx)});
+          });
+          return {
+            id: cellVal(row,cID),
+            type,
+            q: cellVal(row,cQEN),
+            qHi: cellVal(row,cQHI),
+            options,
+            correct: cellVal(row,cAns),
+            notes: cellVal(row,cNotes)
+          };
+        }).filter(q => q.id && q.q);
+      } else {
+        // Sales-style schema: ID,Question,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,Notes
+        const cID=idxOf("ID"), cQ=idxOf("Question"),
+          cA=idxOf("OptionA"), cB=idxOf("OptionB"), cC=idxOf("OptionC"), cD=idxOf("OptionD"),
+          cAns=idxOf("CorrectAnswer"), cNotes=idxOf("Notes");
+
+        ALL_QUESTIONS = rows.map(row => {
+          const options = [];
+          [["A",cA],["B",cB],["C",cC],["D",cD]].forEach(([letter,i]) => {
+            const v = cellVal(row,i);
+            if(v) options.push({letter, text: v, textHi: ""});
+          });
+          return {
+            id: cellVal(row,cID),
+            type: "single",
+            q: cellVal(row,cQ),
+            qHi: "",
+            options,
+            correct: cellVal(row,cAns),
+            notes: cellVal(row,cNotes)
+          };
+        }).filter(q => q.id && q.q);
+      }
+
+      if(ALL_QUESTIONS.length === 0) throw new Error("Sheet se koi question row parse nahi hui.");
+      startQuiz();
+    }catch(err){
+      showLoadError(err);
+    }
+  };
+
+  const script = document.createElement("script");
+  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${GVIZ_CALLBACK}&gid=${typeInfo.gid}&headers=1`;
+  script.onerror = () => {
+    clearTimeout(timeoutId);
+    showLoadError(new Error("Script tag load nahi hua — internet connection ya Sheet ID check karo."));
+  };
+  document.body.appendChild(script);
+}
+
+function showLoadError(err){
+  app.innerHTML = `<div class="card">
+    <div class="error-box">
+      <b>Questions load nahi hue.</b><br><br>
+      Yeh quiz Google Sheets se live data padhta hai, jiske liye sheet
+      <b>"Anyone with the link — Viewer"</b> shared honi chahiye. Sheet kholo, <b>Share</b> pe click
+      karo, access "Anyone with the link" (Viewer) set karo, phir page reload karo.<br><br>
+      <a href="${SHEET_EDIT_URL}" target="_blank" rel="noopener">Google Sheet kholo →</a><br><br>
+      <button class="btn-secondary" onclick="renderStart()" style="margin-top:6px;">Wapas jao</button><br><br>
+      <span style="opacity:.7">Technical detail: ${esc(err.message)}</span>
+    </div>
+  </div>`;
+}
+
+function startQuiz(){
+  QUIZ = shuffle(ALL_QUESTIONS);
+  idx = 0;
+  answers = {};
+  resultSent = false;
+  quizQuit = false;
+  renderQuestion();
+}
+
+function quitQuiz(){
+  const ok = window.confirm("Kya aap quiz beech mein chhodna chahte hain? Ab tak ke jawab hi count honge, baaki questions ka jawab nahi diya gaya maana jayega.");
+  if(!ok) return;
+  quizQuit = true;
+  renderResults();
+}
+
+function renderQuestion(){
+  const q = QUIZ[idx];
+  const total = QUIZ.length;
+  const pct = Math.round((idx/total)*100);
+  const saved = answers[q.id];
+
+  let bodyHtml = "";
+  if(q.type === "single"){
+    bodyHtml = q.options.map(o => {
+      const checked = saved === o.letter;
+      return `<label class="option ${checked?'selected':''}" data-letter="${o.letter}">
+        <input type="radio" name="opt" value="${o.letter}" ${checked?'checked':''}>
+        <div class="otext"><b>${o.letter}.</b> ${esc(o.text)}</div>
+      </label>`;
+    }).join("");
+  } else if(q.type === "multi"){
+    const savedSet = new Set((saved||"").split(",").filter(Boolean));
+    bodyHtml = q.options.map(o => {
+      const checked = savedSet.has(o.letter);
+      return `<label class="option ${checked?'selected':''}" data-letter="${o.letter}">
+        <input type="checkbox" value="${o.letter}" ${checked?'checked':''}>
+        <div class="otext"><b>${o.letter}.</b> ${esc(o.text)}</div>
+      </label>`;
+    }).join("") + `<p style="font-size:0.8rem;color:var(--muted);margin-top:8px;">Jitne sahi lagein utne select karo.</p>`;
+  } else {
+    bodyHtml = `<textarea id="textAns" rows="3" placeholder="Apna jawab likho...">${esc(saved||"")}</textarea>`;
+  }
+
+  app.innerHTML = `
+    <div class="progress-outer"><div class="progress-inner" style="width:${pct}%"></div></div>
+    <div class="card">
+      <div class="qmeta" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Question ${idx+1} of ${total}</span>
+        <button class="btn-secondary" id="quitBtn" style="padding:4px 10px; font-size:0.78rem; border-color:var(--bad); color:var(--bad);">Quiz Chhodo</button>
+      </div>
+      <div class="qtext">${esc(q.q)}</div>
+      ${q.qHi ? `<div class="qtext-hi">${esc(q.qHi)}</div>` : ""}
+      <div id="optionsHost">${bodyHtml}</div>
+      <div class="btn-row">
+        <button class="btn-secondary" id="prevBtn" ${idx===0?'disabled':''}>Previous</button>
+        <div class="spacer"></div>
+        <button class="btn-primary" id="nextBtn">${idx===total-1 ? "Finish & Score Dekho" : "Next"}</button>
+      </div>
+    </div>
+  `;
+
+  if(q.type === "single"){
+    app.querySelectorAll(".option").forEach(el => {
+      el.onclick = () => { answers[q.id] = el.dataset.letter; renderQuestion(); };
+    });
+  } else if(q.type === "multi"){
+    app.querySelectorAll(".option").forEach(el => {
+      el.onclick = () => {
+        const letter = el.dataset.letter;
+        const set = new Set((answers[q.id]||"").split(",").filter(Boolean));
+        if(set.has(letter)) set.delete(letter); else set.add(letter);
+        answers[q.id] = Array.from(set).sort().join(",");
+        renderQuestion();
+      };
+    });
+  } else {
+    const ta = document.getElementById("textAns");
+    ta.oninput = () => { answers[q.id] = ta.value; };
+  }
+
+  document.getElementById("prevBtn").onclick = () => { if(idx>0){ idx--; renderQuestion(); } };
+  document.getElementById("nextBtn").onclick = () => {
+    if(idx < total-1){ idx++; renderQuestion(); } else { renderResults(); }
+  };
+  document.getElementById("quitBtn").onclick = quitQuiz;
+}
+
+function gradeQuestion(q){
+  const user = answers[q.id];
+  if(q.type === "text_open") return {scored:false};
+  if(!user) return {scored:true, correct:false};
+
+  if(q.type === "single"){
+    return {scored:true, correct: user === q.correct};
+  }
+  if(q.type === "multi"){
+    const userSet = (user||"").split(",").filter(Boolean).sort().join(",");
+    const correctSet = (q.correct||"").split(",").map(s=>s.trim()).filter(Boolean).sort().join(",");
+    return {scored:true, correct: userSet === correctSet};
+  }
+  // text
+  const u = (user||"").trim().toLowerCase();
+  const c = (q.correct||"").trim().toLowerCase();
+  const match = u === c || (u && c && (u.includes(c) || c.includes(u)));
+  return {scored:true, correct: !!match};
+}
+
+function sendResultToSheet(payload){
+  if(!RESULTS_ENDPOINT || RESULTS_ENDPOINT.indexOf("PASTE_YOUR") === 0) return;
+  try{
+    fetch(RESULTS_ENDPOINT, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify(payload)
+    }).catch(()=>{});
+  }catch(e){ /* logging is best-effort; never block the UI on it */ }
+}
+
+function renderResults(){
+  let scored = 0, correct = 0;
+  const rows = QUIZ.map(q => {
+    const g = gradeQuestion(q);
+    if(g.scored){ scored++; if(g.correct) correct++; }
+    return {q, g};
+  });
+  const total = QUIZ.length;
+  const pct = scored ? Math.round((correct/scored)*100) : 0;
+  const answeredCount = Object.keys(answers).filter(k => answers[k] && String(answers[k]).trim()).length;
+
+  if(!resultSent){
+    resultSent = true;
+    sendResultToSheet({
+      name: userName,
+      mobile: userMobile,
+      quizType: quizType,
+      score: correct,
+      scoredTotal: scored,
+      answeredCount: answeredCount,
+      totalQuestions: total,
+      percent: pct,
+      status: quizQuit ? "Incomplete (Quit)" : "Completed"
+    });
+  }
+
+  const reviewHtml = rows.map(({q,g}) => {
+    const userAns = answers[q.id];
+    let userDisplay = userAns || "(jawab nahi diya)";
+    let correctDisplay = q.correct || "";
+    if(q.type === "single" || q.type === "multi"){
+      const letters = (userAns||"").split(",").filter(Boolean);
+      userDisplay = letters.length ? letters.map(l => {
+        const o = q.options.find(o=>o.letter===l);
+        return o ? `${l}. ${o.text}` : l;
+      }).join(" / ") : "(jawab nahi diya)";
+      const cLetters = (q.correct||"").split(",").map(s=>s.trim()).filter(Boolean);
+      correctDisplay = cLetters.map(l => {
+        const o = q.options.find(o=>o.letter===l);
+        return o ? `${l}. ${o.text}` : l;
+      }).join(" / ");
+    }
+    let tag = "";
+    if(!g.scored) tag = `<span class="tag-open">Reflection — not scored</span>`;
+    else if(g.correct) tag = `<span class="tag-correct">✓ Correct</span>`;
+    else tag = `<span class="tag-wrong">✗ Incorrect</span>`;
+
+    return `<div class="review-item">
+      <div class="review-q">${esc(q.q)}</div>
+      <div class="review-line">${tag}</div>
+      <div class="review-line"><b>Aapka jawab:</b> ${esc(userDisplay)}</div>
+      ${g.scored && !g.correct ? `<div class="review-line"><b>Sahi jawab:</b> ${esc(correctDisplay)}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="card center">
+      ${quizQuit ? `<div class="error-box" style="margin-bottom:14px; text-align:left;"><b>Quiz beech mein chhoda gaya.</b> Jitne questions answer kiye unhi ka score neeche hai.</div>` : ""}
+      <div>Aapka Score — ${esc(QUIZ_TYPES[quizType].label)}</div>
+      <div class="score-num">${correct} / ${scored}</div>
+      <div class="score-pct">${pct}% correct${total>scored ? ` &middot; ${total-scored} reflection question(s) not scored` : ""}</div>
+      <div class="btn-row" style="justify-content:center;">
+        <button class="btn-primary" id="retakeBtn">Dobara Try Karo</button>
+        <button class="btn-secondary" id="reviewBtn">Review Dekho</button>
+        <button class="btn-secondary" id="changeTypeBtn">Quiz Type Badlo</button>
+      </div>
+    </div>
+    <div class="card" id="reviewCard" style="display:none;">
+      <h3 style="margin-top:0;">Review</h3>
+      ${reviewHtml}
+    </div>
+  `;
+  document.getElementById("retakeBtn").onclick = () => loadSheetAndStart();
+  document.getElementById("changeTypeBtn").onclick = () => renderStart();
+  document.getElementById("reviewBtn").onclick = () => {
+    const card = document.getElementById("reviewCard");
+    card.style.display = card.style.display === "none" ? "block" : "none";
+  };
+}
+
+renderStart();
+</script>
+</body>
+</html>
