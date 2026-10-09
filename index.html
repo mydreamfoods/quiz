@@ -101,7 +101,8 @@ const RESULTS_ENDPOINT = "https://script.google.com/macros/s/AKfycbxaSPvzWxYlpsD
 // Quiz types -> which tab (gid) to read from
 const QUIZ_TYPES = {
   "Sales": { gid: "1379420378", label: "Sales" },
-  "PC": { gid: "1230662837", label: "PC" }
+  "PC": { gid: "1230662837", label: "PC" },
+  "EA": { gid: "1169422113", label: "EA" }
 };
 
 const app = document.getElementById("app");
@@ -218,7 +219,7 @@ function loadSheetAndStart(){
             correct: cellVal(row,cAns),
             notes: cellVal(row,cNotes)
           };
-        }).filter(q => q.id && q.q);
+        }).filter(q => q.id && q.q && (q.type === "text" || q.type === "text_open" || q.options.length >= 2));
       } else {
         // Sales-style schema: ID,Question,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,Notes
         const cID=idxOf("ID"), cQ=idxOf("Question"),
@@ -240,7 +241,9 @@ function loadSheetAndStart(){
             correct: cellVal(row,cAns),
             notes: cellVal(row,cNotes)
           };
-        }).filter(q => q.id && q.q);
+        }).filter(q => q.id && q.q && q.options.length >= 2);
+        // Any row with fewer than 2 options is skipped rather than shown as a blank question
+        // (happens if a row is only half-filled in while someone is still editing the sheet).
       }
 
       if(ALL_QUESTIONS.length === 0) throw new Error("Sheet se koi question row parse nahi hui.");
@@ -251,7 +254,10 @@ function loadSheetAndStart(){
   };
 
   const script = document.createElement("script");
-  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${GVIZ_CALLBACK}&gid=${typeInfo.gid}&headers=1`;
+  // The &_= cache-buster forces a fresh fetch instead of a stale cached response from
+  // Google's edge — without it, a quiz started right after editing the sheet can show
+  // outdated or partially-synced data for a few minutes.
+  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${GVIZ_CALLBACK}&gid=${typeInfo.gid}&headers=1&_=${Date.now()}`;
   script.onerror = () => {
     clearTimeout(timeoutId);
     showLoadError(new Error("Script tag load nahi hua — internet connection ya Sheet ID check karo."));
